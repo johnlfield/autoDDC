@@ -1,5 +1,5 @@
 import os
-dir = '/Users/johnfield/Desktop/Switchgrass/Results/2013-08-13,21.59'
+dir = '/Users/johnfield/Desktop/Switchgrass/Results/2013-08-14,10.06'
 os.chdir(dir)
 
 
