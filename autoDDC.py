@@ -5,21 +5,20 @@ print "Windows-CSV-formatted 'runtable.csv'."
 print
 print "It assumes the following directory structure:" 
 print "    Main directory: UNIX-exectutable DDcentEVI & DDClist100, runtable.csv"
-print "    Subdirectory 'AFRI_100files': all necessary *.IN & *.100, outvars.txt"
+print "    Subdirectory 'AFRI_100files': all necessary *.in & *.100, outvars.txt"
 print "    Subdirectory 'Results': repository for archived analysis results"
-print "    Subdirectory for each study to be simulated containing all .sch, soils.in," 
-print "         and .wth files for all sites & treatments as named in runtable.csv"
+print "    Subdirectory 'Validation_data: repository of directories for each study" 
+print "         to be simulated containing all .sch, soils.in, and .wth files for" 
+print "         all sites & treatments as named in runtable.csv"
 print "         (Naming conventions: .sch files- site_eq, site_base, site_treatment;" 
-print "          weather files- NARR_x_y.wth; soils files- mukey.in)"
+print "           weather files- NARR_x_y.wth; soils files- mukey.in)"
 print "    Subdirectory/subdirectory: this script (autoDDC.py)"
 print
-
 
 ### SET WORKING DIRECTORY, DEFINE OTHER DIRECTORY PATHS
 import os
 import time
 import datetime
-start = time.time()                     #start script runtimer
 tstamp = datetime.datetime.now().strftime("%Y-%m-%d,%H.%M")   #timestamp for archive name
 print "Timestamp:  ", tstamp
 abspath = os.path.abspath(__file__)     #get absolute path where script is located
@@ -29,58 +28,56 @@ os.chdir('..')
 os.chdir('..')                          #navigate TWO directories higher
 dirmain = os.getcwd()                   #define main working directory
 dirlib = dirmain + "/AFRI_100files"     #define *.100 & *.IN library directory
-dirarch = dirmain + "/Results/" + tstamp
+dirarch = dirmain + "/Results/" + tstamp    #define archive directory
+print "Please type a description for this analysis run to be use in plot titles"
+print "and output file headers:"
+descr = raw_input()                     #record test 'description'
+print
 print "Main directory:  ", dirmain
 print "Archive directory:  ", dirarch
 print
 print "If you wish to re-use the *.bin files from an existing spin-up sequence, please" 
 print "specify the archive directory name (leave blank to run a new spin-up sequence):"
-nospin = raw_input()                                  # If r = True, Then no spinup
+nospin = raw_input()                        # If nospin = True, then no spinup
 dirapp = dirmain + "/Results/" + nospin     #define appended .bin directory path
+start = time.time()                         #start analysis run timer
 print
 
-
-### IMPORT LIBRARY FILES
+### IMPORT NON .100 LIBRARY FILES
+#note that we don't have to import .100 files, since we have specified a path
+#for those in the DDCentEVI call
 import glob
 import shutil
 for file in glob.glob(os.path.join(dirlib, '*')):
-    if file.endswith(".100") or file.endswith(".in") or file.endswith(".txt"):
-        shutil.copy(file, dirmain)      #copy all .100/.in/.txt files to main directory
-os.chdir(dirmain)
-os.remove('Milan.100')                  #excluding the Milan practice site.100 file
-# x = raw_input("Check for library files, and press Enter/Return to continue")
-
+    if file.endswith(".in") or file.endswith(".txt"):
+        shutil.copy(file, dirmain)    #copy all .in/.txt files to main directory
 
 ### DDCENTEVI/DDCENTLIST100 CALL
-# runs either an equilibrium-base-experiment sequence, or just an experiment depending on
-# the boolean value of 'spin' 
-# generates a final .lis output 
-def DDCentEVI(feq,fbase,fexp):          #Note: eq changed to feq within function, etc.
+#if base.bin is found in the main/working directory, spinup sequence is skipped
+#ensures that spinup isn't re-run for every treatment using it separately
+def DDCentEVI(geq,gbase,gexp):   #'g' prefix added to parameters to avoid conflict with external variables
     import subprocess
-    os.chdir(dirmain)
-    if not os.path.exists(dirmain+"/"+fbase+".bin"):
-        print "Running full simulation sequence of "+feq+".sch, "+fbase+".sch, and "+fexp+".sch"
-        runeq = "./DDcentEVI -s %s.sch -n %s -l AFRI_100files" % (feq,feq)
-        subprocess.call("%s" % (runeq), shell=True)
-        runbase = "./DDcentEVI -s %s.sch -n %s -e %s -l AFRI_100files" % (fbase,fbase,feq)
-        subprocess.call("%s" % (runbase), shell=True)
+    if not os.path.exists(dirmain+"/"+gbase+".bin"):     #if base.bin not found, run spinup
+        print "Running full simulation sequence of "+geq+".sch, "+gbase+".sch, and "+gexp+".sch"
+        runeq = "./DDcentEVI -s %s.sch -n %s -l AFRI_100files" % (geq,geq)  
+        subprocess.call("%s" % (runeq), shell=True)      #execute DDcentEVI in Darwin for equilibrium
+        runbase = "./DDcentEVI -s %s.sch -n %s -e %s -l AFRI_100files" % (gbase,gbase,geq)
+        subprocess.call("%s" % (runbase), shell=True)    #execute DDcentEVI in Darwin for base
     else:
-        print "Appending the simulation of "+fexp+".sch to "+fbase+".bin"
-    runexp = "./DDcentEVI -s %s.sch -n %s -e %s -l AFRI_100files" % (fexp,fexp,fbase)
+        print "Appending the simulation of "+gexp+".sch to "+gbase+".bin"
+    runexp = "./DDcentEVI -s %s.sch -n %s -e %s -l AFRI_100files" % (gexp,gexp,gbase)
     subprocess.call("%s" % (runexp), shell=True)
     runlis = "./DDClist100 %s %s outvars.txt" % (exp,exp)
-    subprocess.call("%s" % (runlis), shell=True)
-    # x = raw_input("Check for DayCent execution success (.lst creation), and press Enter/Return to continue")
-
+    subprocess.call("%s" % (runlis), shell=True)         #execute DDClist100 on experiment .bin output
 
 ### READ & EXECUTE RUNTABLE.CSV BY LINE
 import csv
-reader = csv.reader(open('runtable.csv', 'rb'))
+reader = csv.reader(open('runtable.csv', 'rb'))   #import runtable.csv as a list of lines
 print "Runtable:"
 treatcount = 0
 for row in reader:
     print row
-    treatcount += 1
+    treatcount += 1   #count the number of treatments read for runtime calcs
   #parse runtable
     study = row[0]
     site = row[1]
@@ -89,54 +86,53 @@ for row in reader:
     NARRx = row[4]
     NARRy = row[5]
   #define directory & file name variables from runtable contents
-    dirstudy = dirmain + "/validation_data/" + study
-    filesite100 = site+".100"
-    filewth = "NARR_"+NARRx+"_"+NARRy+".wth"
-    filesoilsin = soil+".in"
+  #naming convention: fsite = full file name derived from site variable
+    dirstudy = dirmain+"/Validation_data/"+study
+    fsite = site+".100"
+    fwth = "NARR_"+NARRx+"_"+NARRy+".wth"
+    fsoil = soil+".in"
     eq = site+"_eq"
-    fileeq = eq+".sch"
+    feq = eq+".sch"
     base = site+"_base"
-    filebase = base+".sch"
-    filebin = base+".bin"
+    fbase = base+".sch"
+    fbin = base+".bin"
     exp = site+"_"+treat
-    fileexp = exp+".sch"
-    filelist = (filesite100, filewth, filesoilsin, fileeq, filebase, fileexp)
+    fexp = exp+".sch"
+    flist = (fsite, fwth, fsoil, feq, fbase, fexp)
   #move all necessary files into main directory
     os.chdir(dirstudy)
-    for file in filelist:                #move all DayCent run files to main directory
-        shutil.copy(file, dirmain)
-    if bool(nospin) == True:                   #if append was selected, import appropriate .bin
-        if not os.path.exists(dirmain+"/"+filebin):
+    for f in flist:                #move all DayCent run files to main directory
+        shutil.copy(f, dirmain)
+    if bool(nospin) == True:       #if append was selected, import appropriate .bin
+        if not os.path.exists(dirmain+"/"+fbin):
             os.chdir(dirapp)
-            shutil.copy(filebin, dirmain)
-    # x = raw_input("Check for binary file to append, and press Enter/Return to continue")
+            shutil.copy(fbin, dirmain)
   #call DDCentEVI function
     os.chdir(dirmain)
-    os.rename(filesoilsin, "soils.in")
-    os.rename(filewth, site+".wth")
+    os.rename(fsoil, "soils.in")
+    os.rename(fwth, site+".wth")
     print "Simulating "+study+" at "+site+", treatment "+treat
-    print "    using "+filesoilsin+" and "+filewth
-    DDCentEVI(eq,base,exp) 
+    print "    using "+fsoil+" and "+fwth
+    DDCentEVI(eq,base,exp)         #call the previously-defined DDCENTEVI function
   #misc. file cleanup
-    os.chdir(dirmain)
-    os.remove(filesite100)                  #delete site.100
-    os.remove("soils.in")                   #delete soils.in
-    for file in glob.glob(os.path.join(dirmain, '*')):
-        if file.endswith(".sch") or file.endswith(".wth"):
-            os.remove(file)                 #delete .sch/.wth files from main directory
-print
-
+    os.remove(fsite)               #delete site.100
+    os.remove("soils.in")          #delete soils.in
+    for f in glob.glob(os.path.join(dirmain, '*')):
+        if f.endswith(".sch") or f.endswith(".wth"):
+            os.remove(f)           #delete .sch/.wth files from main directory
 
 ### ARCHIVE RESULTS, WORKING DIRECTORY CLEANUP
-os.chdir(dirmain)
 for file in glob.glob(os.path.join(dirmain, '*')):
-    if file.endswith(".100") or file.endswith(".in") or file.endswith(".txt"):
-        os.remove(file)                 #delete .100/.in/.txt files from main directory
+    if file.endswith(".in") or file.endswith(".txt"):
+        os.remove(file)            #delete remaining .in/.txt files from main directory
 if not os.path.exists(dirarch):
-    os.makedirs(dirarch)                #create archive directory if doesn't exist
+    os.makedirs(dirarch)           #create archive directory if doesn't exist
 for file in glob.glob(os.path.join(dirmain, '*')):
     if file.endswith(".bin") or file.endswith(".lis") or file.endswith(".out"):
         shutil.move(file, dirarch)      #archive all .bin/.lis/.out files together
+
+
+
 
 
 ### IMPORT, LABEL & CONCATENATE .LIS FILES
@@ -163,7 +159,6 @@ for file in glob.glob(os.path.join(dirarch, '*')):
         i += 1
 print
 
-
 ### DELETE REDUNDENT .LIS ENTRIES, CONVERT CRMVST TO YIELD, REINDEX YEARS
 redun = True
 row = 0
@@ -183,7 +178,6 @@ for row in range(len(table)):
     year = int(year)-1                               #round and index back 1 year
     table[row][1] = year                             #replace original year with reindexed
  
-
 ### IMPORT MEASURED YIELDS, JOIN TO MODEL RESULTS
 os.chdir(dirmain)
 import csv
@@ -221,34 +215,81 @@ for row in yie:
     print row
 print
 
-
 ### remaining piece #3 add capability to save a results file
 
-
 ### ANALYZE & PLOT RESULTS
-import matplotlib.pyplot as plt
+#decompose final datatable yie[]
+treat = [[]]
+year = [[]]
 meas =[[]]
 mod = [[]]
-lab = [[]]
 for i in range(len(yie)):
+    treat.append(yie[i][0])
+    year.append(yie[i][1])
     meas.append(yie[i][2])
     mod.append(yie[i][3])
-    lab.append(yie[i][0])
 del meas[0]
 del mod[0]
-del lab[0]
-plt.plot([0,20], [0,20])
+del treat[0]
+#generate datatable of averages across years for each treatment
+treatuniq = set(treat)            #list unique treatments by converting to set
+treatset = list(treatuniq)        #convert back to list format
+measavgs = [[]]
+modavgs = [[]]
+for treat in treatset:            #for every unique treatment
+    measset = [[]]
+    modset = [[]]
+    for i in range(len(yie)):     #loop through yie[] and list matching meas, mod results
+        if yie[i][0] == treat:
+            measset.append(yie[i][2])
+            modset.append(yie[i][3])
+    del measset[0]
+    del modset[0]
+    measavg = np.mean(measset)   #average across those lists
+    modavg = np.mean(modset)
+    measavgs.append(measavg)
+    modavgs.append(modavg)
+del measavgs[0]
+del modavgs[0]
+#compute annual, treatment-averaged RMSE values
+def rmse(listmeas,listmod):
+    sqerr = 0
+    for i in range(len(listmeas)):
+        sqerr += (listmod[i]-listmeas[i])**2
+    return (sqerr/float(len(listmeas)))**0.5
+RMSEannual = rmse(meas,mod)
+RMSEavg = rmse(measavgs,modavgs)
+#plot treatment averages
+import matplotlib.pyplot as plt
+plt.plot([0,25], [0,25])       
+plt.plot(measavgs, modavgs, 'ro')
+###turn on point labeling by un-commenting below
+#for i in range(len(yie)):
+#    plt.annotate(treatset[i], xy = (measavgs[i], modavgs[i]), fontsize=7)
+plt.title(descr+", treatment averages")
+plt.xlabel('Measured switchgrass yield (dry Mg/ha)')
+plt.ylabel('Modeled switchgrass yield (dry Mg/ha)')
+plt.text(2, 21, "RMSE = "+str(round(RMSEavg,3))+" Mg/ha")
+os.chdir(dirarch)
+plt.show()
+sec = round((time.time() - start), 2)
+plt.savefig('Mod-v-meas(averaged).png')
+plt.close()
+#plot individual years
+plt.plot([0,25], [0,25])       
 plt.plot(meas, mod, 'ro')
 ###turn on point labeling by un-commenting below
 #for i in range(len(yie)):
-#    plt.annotate(lab[i], xy = (meas[i], mod[i]), fontsize=7)
+#    plt.annotate(treat[i], xy = (meas[i], mod[i]), fontsize=7)
+plt.title(descr+", annual results")
 plt.xlabel('Measured switchgrass yield (dry Mg/ha)')
 plt.ylabel('Modeled switchgrass yield (dry Mg/ha)')
+plt.text(2, 21, "RMSE = "+str(round(RMSEannual,3))+" Mg/ha")
+os.chdir(dirarch)
 plt.show()
-
+plt.savefig('Mod-v-meas(annual).png')
 
 ### RUN SUMMARY
-sec = round((time.time() - start), 2)
 secpertreat = round(sec/treatcount, 2)
 min = round(sec/60.0, 2)
 sec = str(sec)
